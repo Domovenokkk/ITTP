@@ -1,0 +1,98 @@
+---
+- name: Configure Nginx Web Server
+  hosts: localhost
+  become: yes
+  vars_files:
+    - "{{ playbook_dir }}/inventories/production/group_vars/webservers.yml"
+
+  tasks:
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Nginx package
+      package:
+        name: "{{ nginx_package }}"
+        state: present
+
+    - name: Create directory for custom configurations
+      file:
+        path: "{{ nginx_conf_dir }}/conf.d"
+        state: directory
+        mode: '0755'
+
+    - name: Configure main nginx.conf using template
+      template:
+        src: "{{ playbook_dir }}/templates/nginx.conf.j2"
+        dest: "{{ nginx_conf_dir }}/nginx.conf"
+        mode: '0644'
+      notify: restart nginx
+
+    - name: Validate Nginx configuration
+      command: nginx -t -c {{ nginx_conf_dir }}/nginx.conf
+      register: nginx_test
+      changed_when: false
+      failed_when: false
+      ignore_errors: yes
+
+    - name: Configure default site
+      template:
+        src: "{{ playbook_dir }}/templates/default_site.j2"
+        dest: "{{ nginx_sites_available_dir }}/default"
+        mode: '0644'
+      notify: restart nginx
+
+    - name: Create web root directory
+      file:
+        path: "{{ nginx_root_dir }}"
+        state: directory
+        mode: '0755'
+        owner: www-data
+        group: www-data
+
+    - name: Create default index page
+      copy:
+        content: "<h1>Welcome to {{ nginx_server_name }}</h1>"
+        dest: "{{ nginx_root_dir }}/index.html"
+        mode: '0644'
+        owner: www-data
+        group: www-data
+
+    - name: Enable default site
+      file:
+        src: "{{ nginx_sites_available_dir }}/default"
+        dest: "{{ nginx_sites_enabled_dir }}/default"
+        state: link
+      notify: restart nginx
+
+    - name: Ensure Nginx is running
+      block:
+        - name: Stop Nginx if running
+          command: pkill nginx
+          ignore_errors: yes
+          changed_when: false
+          register: nginx_stop
+
+        - name: Start Nginx
+          command: nginx -c {{ nginx_conf_dir }}/nginx.conf
+          register: nginx_start
+          changed_when: nginx_start.rc == 0
+          notify: restart nginx
+
+    - name: Verify Nginx is running
+      command: pgrep nginx
+      register: nginx_status
+      changed_when: false
+      failed_when: nginx_status.rc != 0
+
+    - name: Wait for Nginx to become available
+      wait_for:
+        port: "{{ nginx_listen_port }}"
+        timeout: 30
+      delegate_to: localhost
+
+  handlers:
+    - name: restart nginx
+      command: "nginx -s reload"
+      when: ansible_facts['service_mgr'] != 'systemd'

@@ -1,0 +1,30 @@
+user {{ nginx_user }};
+worker_processes {{ nginx_worker_processes }};
+
+error_log  {{ nginx_log_dir }}/error.log;
+pid        /run/nginx.pid;
+
+events {
+    worker_connections {{ nginx_worker_connections }};
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  {{ nginx_log_dir }}/access.log  main;
+
+    sendfile        on;
+    tcp_nopush      on;
+    tcp_nodelay     on;
+
+    keepalive_timeout  {{ nginx_keepalive_timeout }};
+    client_max_body_size {{ nginx_client_max_body_size }};
+
+    include {{ nginx_conf_dir }}/conf.d/*.conf;
+    include {{ nginx_conf_dir }}/sites-enabled/*;
+}

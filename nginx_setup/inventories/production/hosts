@@ -1,0 +1,7 @@
+[webservers]
+localhost
+
+[webservers:vars]
+ansible_connection=local
+ansible_become=yes
+nginx_server_name="localhost"
