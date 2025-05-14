@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  nginx:
+    build: .
+    container_name: nginx-secure
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html
+      - ./server.crt:/etc/ssl/certs/server.crt
+      - ./server.key:/etc/ssl/private/server.key

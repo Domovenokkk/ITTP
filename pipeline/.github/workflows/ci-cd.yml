@@ -1,0 +1,52 @@
+name: CI/CD for Nginx Docker Application
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Проверка кода из репозитория
+      uses: actions/checkout@v3
+    
+    - name: Вход в Docker Hub
+      run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+
+    - name: Сборка Docker образа
+      run: docker build -t ${{ secrets.DOCKER_USERNAME }}/nginx-secure:latest .
+
+    - name: Запуск контейнера (тестирование)
+      run: docker run -d -p 443:443 --name nginx-secure-test ${{ secrets.DOCKER_USERNAME }}/nginx-secure:latest
+
+    - name: Тестирование контейнера (curl)
+      run: curl -vk https://localhost:443
+
+    - name: Остановка тестового контейнера
+      run: docker rm -f nginx-secure-test
+
+    - name: Публикация на Docker Hub
+      run: docker push ${{ secrets.DOCKER_USERNAME }}/nginx-secure:latest
+
+  deploy:
+    runs-on: windows-latest
+    needs: build
+    
+    steps:
+    - name: Проверка кода из репозитория
+      uses: actions/checkout@v3
+    
+    - name: Вход в Docker Hub
+      run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+
+    - name: Запуск контейнера на сервере (локально)
+      run: |
+        docker pull ${{ secrets.DOCKER_USERNAME }}/nginx-secure:latest
+        docker rm -f nginx-secure || true
+        docker run -d -p 443:443 --name nginx-secure ${{ secrets.DOCKER_USERNAME }}/nginx-secure:latest
